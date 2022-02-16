@@ -133,9 +133,10 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             im0 = annotator.result()
-            print(im0.shape)
+            # print(im0.shape)
         cv2.imshow("res", im0)
-        cv2.waitKey(1)  # 1 millisecond
+        cv2.imwrite("res1.png", im0)
+        cv2.waitKey(0)  # 1 millisecond
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
