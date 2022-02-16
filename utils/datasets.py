@@ -17,7 +17,7 @@ from pathlib import Path
 from threading import Thread
 from zipfile import ZipFile
 
-import pyrealsense2
+import pyrealsense2 as rs
 import cv2
 import numpy as np
 import torch
@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader, Dataset, dataloader, distributed
 from tqdm import tqdm
 
 from utils.augmentations import Albumentations, augment_hsv, copy_paste, letterbox, mixup, random_perspective
-from utils.general import (DATASETS_DIR, LOGGER, NUM_THREADS, check_dataset, check_requirements, check_yaml, clean_str,
+from utils.general import (DATASETS_DIR, LOGGER, NUM_THREADS, check_dataset, check_requirements, check_yaml,
                            segments2boxes, xyn2xy, xywh2xyxy, xywhn2xyxy, xyxy2xywhn)
 from utils.torch_utils import torch_distributed_zero_first
 
@@ -283,41 +283,45 @@ class LoadWebcam:  # for inference
 
 class LoadStreams:
     # YOLOv5 streamloader, i.e. `python detect.py --source 'rtsp://example.com/media.mp4'  # RTSP, RTMP, HTTP streams`
-    def __init__(self, sources='streams.txt', img_size=640, stride=32, auto=True):
+    def __init__(self, img_size=640, stride=32, auto=True, fps=0):
+
+
+        self.fps = fps
         self.mode = 'stream'
         self.img_size = img_size
         self.stride = stride
 
-        if os.path.isfile(sources):
-            with open(sources) as f:
-                sources = [x.strip() for x in f.read().strip().splitlines() if len(x.strip())]
-        else:
-            sources = [sources]
-
-        n = len(sources)
-        self.imgs, self.fps, self.frames, self.threads = [None] * n, [0] * n, [0] * n, [None] * n
-        self.sources = [clean_str(x) for x in sources]  # clean source names for later
+        self.imgs, self.fps, self.frames = None, 0, 0 # all resource was list!!
         self.auto = auto
-        for i, s in enumerate(sources):  # index, source
-            # Start thread to read frames from video stream
-            st = f'{i + 1}/{n}: {s}... '
-            if 'youtube.com/' in s or 'youtu.be/' in s:  # if source is YouTube video
-                check_requirements(('pafy', 'youtube_dl==2020.12.2'))
-                import pafy
-                s = pafy.new(s).getbest(preftype="mp4").url  # YouTube URL
-            s = eval(s) if s.isnumeric() else s  # i.e. s = '0' local webcam
-            cap = cv2.VideoCapture(s)
-            assert cap.isOpened(), f'{st}Failed to open {s}'
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = cap.get(cv2.CAP_PROP_FPS)  # warning: may return 0 or nan
-            self.frames[i] = max(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), 0) or float('inf')  # infinite stream fallback
-            self.fps[i] = max((fps if math.isfinite(fps) else 0) % 100, 0) or 30  # 30 FPS fallback
 
-            _, self.imgs[i] = cap.read()  # guarantee first frame
-            self.threads[i] = Thread(target=self.update, args=([i, cap, s]), daemon=True)
-            LOGGER.info(f"{st} Success ({self.frames[i]} frames {w}x{h} at {self.fps[i]:.2f} FPS)")
-            self.threads[i].start()
+        self.pipeline = rs.pipeline()
+        config = rs.config()
+
+        # Get device product line for setting a supporting resolution
+        pipeline_wrapper = rs.pipeline_wrapper(self.pipeline)
+        pipeline_profile = config.resolve(pipeline_wrapper)
+        device = pipeline_profile.get_device()
+        device_product_line = str(device.get_info(rs.camera_info.product_line))
+
+        found_rgb = False
+        for s in device.sensors:
+            if s.get_info(rs.camera_info.name) == 'RGB Camera':
+                found_rgb = True
+                break
+        if not found_rgb:
+            print("The demo requires Depth camera with Color sensor")
+            exit(0)
+
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 0)
+
+        # Start streaming
+        self.pipeline.start(config)
+
+        color_frame = self.pipeline.wait_for_frames()
+
+        self.imgs = np.asanyarray(color_frame.get_data())
+
+        LOGGER.info(f"Success")
         LOGGER.info('')  # newline
 
         # check for common shapes
@@ -326,34 +330,12 @@ class LoadStreams:
         if not self.rect:
             LOGGER.warning('WARNING: Stream shapes differ. For optimal performance supply similarly-shaped streams.')
 
-    def update(self, i, cap, stream):
-        # Read stream `i` frames in daemon thread
-        n, f, read = 0, self.frames[i], 1  # frame number, frame array, inference every 'read' frame
-        while cap.isOpened() and n < f:
-            n += 1
-            # _, self.imgs[index] = cap.read()
-            cap.grab()
-            if n % read == 0:
-                success, im = cap.retrieve()
-                if success:
-                    self.imgs[i] = im
-                else:
-                    LOGGER.warning('WARNING: Video stream unresponsive, please check your IP camera connection.')
-                    self.imgs[i] = np.zeros_like(self.imgs[i])
-                    cap.open(stream)  # re-open stream if signal was lost
-            time.sleep(1 / self.fps[i])  # wait time
-
-    def __iter__(self):
-        self.count = -1
-        return self
-
-    def __next__(self):
-        self.count += 1
-        if not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord('q'):  # q to quit
-            cv2.destroyAllWindows()
-            raise StopIteration
-
+    def return_info(self):
         # Letterbox
+
+        color_frame = self.pipeline.wait_for_frames()
+        self.imgs = np.asanyarray(color_frame.get_data())
+
         img0 = self.imgs.copy()
         img = [letterbox(x, self.img_size, stride=self.stride, auto=self.rect and self.auto)[0] for x in img0]
 
@@ -364,11 +346,7 @@ class LoadStreams:
         img = img[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW
         img = np.ascontiguousarray(img)
 
-        return self.sources, img, img0, None, ''
-
-    def __len__(self):
-        return len(self.sources)  # 1E12 frames = 32 streams at 30 FPS for 30 years
-
+        return img, img0, None, ''
 
 def img2label_paths(img_paths):
     # Define label paths as a function of image paths
