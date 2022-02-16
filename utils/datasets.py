@@ -3,6 +3,7 @@
 Dataloaders and dataset utils
 """
 
+from builtins import breakpoint
 import glob
 import hashlib
 import json
@@ -312,19 +313,21 @@ class LoadStreams:
             print("The demo requires Depth camera with Color sensor")
             exit(0)
 
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 0)
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, self.fps)
 
         # Start streaming
         self.pipeline.start(config)
 
-        color_frame = self.pipeline.wait_for_frames()
-
+        frame = self.pipeline.wait_for_frames()
+        color_frame = frame.get_color_frame()
         self.imgs = np.asanyarray(color_frame.get_data())
 
         LOGGER.info(f"Success")
         LOGGER.info('')  # newline
 
         # check for common shapes
+        # print([letterbox(x, self.img_size, stride=self.stride, auto=self.auto)[0].shape for x in self.imgs])
+        # s = np.stack([letterbox(x, self.img_size, stride=self.stride, auto=self.auto)[0].shape for x in self.imgs])
         s = np.stack([letterbox(x, self.img_size, stride=self.stride, auto=self.auto)[0].shape for x in self.imgs])
         self.rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
         if not self.rect:
@@ -333,20 +336,20 @@ class LoadStreams:
     def return_info(self):
         # Letterbox
 
-        color_frame = self.pipeline.wait_for_frames()
+        frame = self.pipeline.wait_for_frames()
+        color_frame = frame.get_color_frame()
         self.imgs = np.asanyarray(color_frame.get_data())
+        
+        print(self.imgs.shape)
 
         img0 = self.imgs.copy()
-        img = [letterbox(x, self.img_size, stride=self.stride, auto=self.rect and self.auto)[0] for x in img0]
-
-        # Stack
-        img = np.stack(img, 0)
+        img = letterbox(img0, self.img_size, stride=self.stride, auto=True)[0]
 
         # Convert
-        img = img[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW
+        img = img.transpose((2, 0, 1))[::-1]  # BGR to RGB, BHWC to BCHW
         img = np.ascontiguousarray(img)
 
-        return img, img0, None, ''
+        return img, self.imgs, None, ''
 
 def img2label_paths(img_paths):
     # Define label paths as a function of image paths
