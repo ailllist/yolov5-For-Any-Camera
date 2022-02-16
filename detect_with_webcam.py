@@ -49,7 +49,8 @@ from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 
 IMGSZ = (640, 640)
-FPS = 60 # 0 -> as much as possable (default)
+FPS = 90 # 0 -> as much as possable (default)
+# 90 is best at GTX 1070 (8GB)
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -133,10 +134,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             im0 = annotator.result()
-            # print(im0.shape)
         cv2.imshow("res", im0)
-        cv2.imwrite("res1.png", im0)
-        cv2.waitKey(0)  # 1 millisecond
+        # cv2.imwrite("res1.png", im0)
+        cv2.waitKey(1)  # 1 millisecond
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')

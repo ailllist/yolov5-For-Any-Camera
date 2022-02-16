@@ -339,8 +339,6 @@ class LoadStreams:
         frame = self.pipeline.wait_for_frames()
         color_frame = frame.get_color_frame()
         self.imgs = np.asanyarray(color_frame.get_data())
-        
-        print(self.imgs.shape)
 
         img0 = self.imgs.copy()
         img = letterbox(img0, self.img_size, stride=self.stride, auto=True)[0]
