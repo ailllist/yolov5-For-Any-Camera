@@ -25,10 +25,12 @@ Usage - formats:
 """
 
 import argparse
+import imp
 import os
 import sys
 from pathlib import Path
 
+import copy
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -84,7 +86,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     model.warmup(imgsz=(1 if pt else bs, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
     while True:
-        im, im0s, vid_cap, s = dataset.return_info()
+        im, im0, vid_cap, s = dataset.return_info()
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
@@ -109,11 +111,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         # Process predictions
         for i, det in enumerate(pred):  # per image
             seen += 1
-            im0 = im0s[i].copy()
             s += f'{i}: '
 
             s += '%gx%g ' % im.shape[2:]  # print string
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
+            
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
@@ -131,7 +133,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             im0 = annotator.result()
-
+            print(im0.shape)
         cv2.imshow("res", im0)
         cv2.waitKey(1)  # 1 millisecond
 
