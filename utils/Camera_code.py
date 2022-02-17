@@ -1,10 +1,3 @@
-## License: Apache 2.0. See LICENSE file in root directory.
-## Copyright(c) 2015-2017 Intel Corporation. All Rights Reserved.
-
-###############################################
-##      Open CV and Numpy integration        ##
-###############################################
-
 import pyrealsense2 as rs
 import numpy as np
 
@@ -13,7 +6,7 @@ class Camera:
 
     def __init__(self):
         """
-        Camera initializing part, usually insert here your camera code except loop part(l.e get next frame)
+        Camera initializing part, usually insert here your camera code except loop part(l.e. get next frame)
         """
         self.pipeline = rs.pipeline()
         config = rs.config()
