@@ -1,2 +1,4 @@
 
 *.png
+
+utils/__pycache__/
