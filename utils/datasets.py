@@ -32,6 +32,7 @@ from utils.augmentations import Albumentations, augment_hsv, copy_paste, letterb
 from utils.general import (DATASETS_DIR, LOGGER, NUM_THREADS, check_dataset, check_requirements, check_yaml,
                            segments2boxes, xyn2xy, xywh2xyxy, xywhn2xyxy, xyxy2xywhn)
 from utils.torch_utils import torch_distributed_zero_first
+from utils.Camera_code import Camera
 
 # Parameters
 HELP_URL = 'https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data'
@@ -295,32 +296,8 @@ class LoadStreams:
         self.imgs, self.fps, self.frames = None, 0, 0 # all resource was list!!
         self.auto = auto
 
-        self.pipeline = rs.pipeline()
-        config = rs.config()
-
-        # Get device product line for setting a supporting resolution
-        pipeline_wrapper = rs.pipeline_wrapper(self.pipeline)
-        pipeline_profile = config.resolve(pipeline_wrapper)
-        device = pipeline_profile.get_device()
-        device_product_line = str(device.get_info(rs.camera_info.product_line))
-
-        found_rgb = False
-        for s in device.sensors:
-            if s.get_info(rs.camera_info.name) == 'RGB Camera':
-                found_rgb = True
-                break
-        if not found_rgb:
-            print("The demo requires Depth camera with Color sensor")
-            exit(0)
-
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, self.fps)
-
-        # Start streaming
-        self.pipeline.start(config)
-
-        frame = self.pipeline.wait_for_frames()
-        color_frame = frame.get_color_frame()
-        self.imgs = np.asanyarray(color_frame.get_data())
+        self.cam = Camera()
+        self.imgs = self.cam.get_next_img()
 
         LOGGER.info(f"Success")
         LOGGER.info('')  # newline
@@ -335,10 +312,7 @@ class LoadStreams:
 
     def return_info(self):
         # Letterbox
-
-        frame = self.pipeline.wait_for_frames()
-        color_frame = frame.get_color_frame()
-        self.imgs = np.asanyarray(color_frame.get_data())
+        self.imgs = self.cam.get_next_img()
 
         img0 = self.imgs.copy()
         img = letterbox(img0, self.img_size, stride=self.stride, auto=True)[0]
