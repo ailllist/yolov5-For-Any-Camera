@@ -51,7 +51,6 @@ from utils.torch_utils import select_device, time_sync
 
 IMGSZ = (640, 640)
 FPS = 90 # 0 -> as much as possable (default)
-# 90 is best at GTX 1070 (8GB)
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -81,8 +80,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     cudnn.benchmark = True  # set True to speed up constant image size inference
     dataset = LoadStreams(img_size=imgsz, stride=stride, auto=pt, fps=FPS)
     bs = 1
-
-    vid_path, vid_writer = [None] * bs, [None] * bs
 
     # Run inference
     model.warmup(imgsz=(1 if pt else bs, 3, *imgsz), half=half)  # warmup
