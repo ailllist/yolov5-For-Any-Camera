@@ -30,6 +30,7 @@ import os
 import sys
 from pathlib import Path
 
+import time
 import copy
 import cv2
 import torch
@@ -87,6 +88,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     model.warmup(imgsz=(1 if pt else bs, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
     while True:
+        s_time = time.time()
         im, im0, vid_cap, s = dataset.return_info()
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
@@ -140,7 +142,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-
+        print(1/(time.time()-s_time), time.time()-s_time)
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
