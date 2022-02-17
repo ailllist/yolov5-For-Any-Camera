@@ -1,2 +1,0 @@
-source /home/autonav-linux/Desktop/develop/pytorch_learn/pytorch/bin/activate
-먼저 실행할 것
